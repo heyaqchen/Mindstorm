@@ -1,47 +1,38 @@
-# Mindstorm · 邮箱账户阶段
+# Mindstorm
 
-此目录是发布包，可以放入 heyaqchen/Mindstorm 仓库根目录。它不包含浏览器中的私人文稿。
+Every idea counts.
 
-## 当前状态
+网站：https://heyaqchen.github.io/Mindstorm/
 
-已实现：人物账户入口、邮箱注册与登录、验证邮件重发、密码找回、账户名称与头像编辑、邮箱换绑、退出登录、按登录账户自动署名。
-文稿目前仍保存在当前浏览器，并按账户区分；尚未实现文稿云端存储、Bunch 在线分享/成员权限和实时协作。不要把登录成功误认为文稿已经云端备份。
+## 已部署
 
-## 发布网页
+- GitHub Pages：main 分支根目录，HTTPS。
+- Supabase 项目：vwukwgqsohqzrelalmpk。
+- 邮箱登录、注册、验证邮件重发、密码找回。
+- 账户名字、头像、邮箱修改，以及自动作者署名。
+- 账户资料表和私有头像存储；行级权限限制用户访问自己的资料。
+- 认证 Site URL 与回跳白名单已设为上述网站地址。
 
-1. 把本目录的文件上传至 GitHub 仓库根目录（包含 .github/workflows/pages.yml）。
-2. 仓库 Settings → Pages → Source 选择 GitHub Actions。
-3. 在 Actions 中运行 Publish Mindstorm，或向 main 分支提交以触发发布。
-4. 预期网站地址：https://heyaqchen.github.io/Mindstorm/ 。这是配置的目标地址，不代表已成功上线。
+## 当前范围
 
-也可以只上传 index.html、.nojekyll、SUPABASE-LICENSE.txt，在 Pages 中选择 Deploy from a branch → main → /(root)。私有仓库能否启用 Pages 取决于 GitHub 套餐；无需为此公开任何私人文稿。
+文稿仍保存在当前浏览器，并按账户区分；尚未实现云端文稿、Bunch 在线分享/成员权限和实时协作。登录不等于文稿已云端备份。
 
-## 配置现有 Supabase 项目
+目前使用 Supabase 默认测试邮件服务；测试请使用该 Supabase 组织成员邮箱。正式开放其他人注册前需要配置自定义 SMTP。当前不启用付费发信，也不取消邮箱验证。
 
-项目：https://supabase.com/dashboard/project/vwukwgqsohqzrelalmpk
+## 初始化与维护
 
-1. SQL Editor 新建查询，执行 supabase/001-account.sql。它创建账户资料表及私有头像存储桶，并限制用户只读写自己的资料/头像。
-2. Authentication → URL Configuration：
-   - Site URL：https://heyaqchen.github.io/Mindstorm/
-   - Redirect URLs：添加 https://heyaqchen.github.io/Mindstorm/
-3. Authentication 中启用 Email 登录，保留邮箱验证。正式向普通用户发送注册/恢复邮件前，配置自定义 SMTP；Supabase 默认发信服务有收件人和频率限制。
-4. 测试：注册 → 邮件验证 → 登录 → 修改昵称/头像 → 换绑邮箱验证 → 退出 → 再次登录。用第二个账户确认不能读取或覆盖第一个账户的头像。
+001-account.sql 已在现有 Supabase 项目 SQL Editor 成功执行，创建账户资料及头像权限，保留副本供维护。它不删除文稿数据。
 
-网页只包含公开 Project URL 和 Publishable key；不要放入 service_role、secret key 或数据库密码。
+网页内仅包含公开项目 URL 与 Publishable key，不得加入 service_role、secret key 或数据库密码。
 
-## 验证范围与限制
+本地旧文稿不会随网站发布自动上传，请先在原本地页面导出，然后在新网站导入。
 
-已通过本地模拟接口测试（登录/注册确认/错误验证/资料修改/退出/账号切换）以及 JavaScript 语法检查。尚未在真实账户上发送验证邮件，也未执行服务器 SQL；当前环境访问 Supabase 出现网络中断，GitHub 仓库未取得登录权限。
+## 检查记录
 
-本地 file:// 页面适合看界面，完整邮件回跳必须在发布后的 HTTPS 网站上测试。浏览器旧版文稿仍留在旧页面对应的浏览器存储中，不会随发布自动上传或迁移；先导出保存，再在新网站导入。
+本地模拟登录/注册确认/密码不一致/资料修改/退出/账户隔离测试通过，发布文件脚本语法检查通过。线上首页与登录入口正常，未发现浏览器错误。完整邮件验证和真实用户登录由项目所有者测试。
 
-## 下一阶段
+## 后续顺序
 
-先做 Bunch 云端文档、分享邀请和 owner/editor/commenter/viewer 权限（数据库逐行权限校验），之后再做实时批注和有冲突处理的协同编辑。好友搜索和直接发给好友暂不实现。
+Bunch 云端保存、分享链接与成员权限 → 实时批注 → 有冲突处理的协同编辑。暂不制作好友搜索或直接发送给好友。
 
-参考：
-- https://docs.github.com/en/pages/getting-started-with-github-pages/what-is-github-pages
-- https://supabase.com/docs/guides/auth/redirect-urls
-- https://supabase.com/docs/guides/auth/auth-smtp
-
-第三方：Supabase JavaScript SDK 2.117.3，MIT 授权，见 SUPABASE-LICENSE.txt。
+Supabase JavaScript SDK 2.117.3 的 MIT 授权见 SUPABASE-LICENSE.txt；该授权文件仅适用于第三方 SDK，不是 Mindstorm 自身的授权声明。
