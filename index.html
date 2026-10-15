@@ -1355,15 +1355,15 @@ window.MINDSTORM_CONFIG = {
   const ids=new Set([...versions.keys()].filter(id=>groupById(id)&&roles.has(id)));
   for(const [id,entry] of channels)if(!ids.has(id)){try{entry.unsubscribe()}catch{}channels.delete(id);realtime.delete(id)}
   for(const id of ids){if(channels.has(id))continue;
-   const channel=client.channel('mindstorm-bunch-'+id).on('postgres_changes',{event:'UPDATE',schema:'public',table:'mindstorm_bunch_signals',filter:'bunch_id=eq.'+id},event=>{if(Number(event.new?.version)>Number(versions.get(id)||0))pullLatest(id)}).subscribe(state=>{realtime.set(id,state);if(state==='SUBSCRIBED')pullLatest(id);if(current()?.id===id)refreshPermission()});
+   const channel=client.channel('mindstorm-bunch-'+id).on('postgres_changes',{event:'*',schema:'public',table:'mindstorm_bunch_signals',filter:'bunch_id=eq.'+id},event=>{if(Number(event.new?.version)>Number(versions.get(id)||0))pullLatest(id)}).subscribe(state=>{realtime.set(id,state);if(state==='SUBSCRIBED')pullLatest(id);if(current()?.id===id)refreshPermission()});
    channels.set(id,channel)
   }
  }
  async function pullLatest(id){
   if(!ready||!user||pulling.has(id))return;pulling.add(id);const uid=user.id;
   try{const {data:row,error}=await client.from('mindstorm_bunches').select('id,owner_id,payload,version,updated_at').eq('id',id).single();if(error)throw error;if(uid!==user?.id||!row||Number(row.version)<=Number(versions.get(id)||0)||!validPayload(row.payload,id))return;
-   const local=groupById(id),remote=JSON.stringify(row.payload),localJson=local?JSON.stringify(payloadFor(local)):null;
-   if(local&&localJson!==remote){backup(id);conflicts.set(id,row);if(current()?.id===id)status('云端有新版本 · 请在分享与成员中处理');refreshPermission();return}
+   const local=groupById(id),remote=JSON.stringify(row.payload),localJson=local?JSON.stringify(payloadFor(local)):null,previous=shadows.get(id);
+   if(local&&localJson!==remote&&localJson!==previous){backup(id);conflicts.set(id,row);if(current()?.id===id)status('云端有新版本 · 请在分享与成员中处理');refreshPermission();return}
    if(local)hydrate(row);else if(!hydrate(row))return;
    versions.set(id,row.version);shadows.set(id,remote);const group=groupById(id);if(group){group.cloudVersion=row.version;group.cloudOwnerId=row.owner_id}
    loading=true;appStorage.setItem('mindstorm-workspace-v1',JSON.stringify(workspace));initBunches();renderTabs();renderHistoryShelf();if(current()?.id===id&&document.body.classList.contains('bunch-view'))renderBunchBoard();loading=false;refreshPermission()
