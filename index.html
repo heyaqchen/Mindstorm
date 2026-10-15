@@ -1299,6 +1299,7 @@ window.MINDSTORM_CONFIG = {
 </script><script id="cloudCode">(() => {
  const $=s=>document.querySelector(s);
  let client=null,user=null,ready=false,loading=false,timer=null,writing=false,again=false,startPromise=null,startingUid=null,inFlight=null;
+ const realtime=new Map(),channels=new Map(),pulling=new Set();
  const versions=new Map(),shadows=new Map(),roles=new Map(),conflicts=new Map();
  const errorText=e=>e?.message||'云端操作失败，请稍后重试。';
  const groupById=id=>workspace?.bunches?.find(g=>g.id===id);
@@ -1315,7 +1316,7 @@ window.MINDSTORM_CONFIG = {
   const group=current(),view=!!group&&!canEditGroup(group.id);document.body.classList.toggle('bunch-cloud-viewer',view);
   if(group){$('#bunchTitle').readOnly=view;$('#bunchImport').disabled=view;$('#bunchShare').textContent=roles.get(group.id)==='owner'?'分享与成员':'查看成员';}
   if(state.space==='team'&&!shared){editor.contentEditable=String(!view&&!collab.overview);$('#title').readOnly=view||collab.overview;}
-  status(!user?'登录后可保存与分享 Bunch':!group?'':conflicts.has(group.id)?'云端有新版本 · 请在分享与成员中处理':!ready?'正在连接云端…':!versions.has(group.id)?'正在保存到云端…':view?'云端已保存 · 只读成员':shadows.get(group.id)!==JSON.stringify(payloadFor(group))?'修改已保存在本机 · 等待同步':'云端已保存 · '+(roles.get(group.id)==='owner'?'创建者':'可编辑'));
+  status(!user?'登录后可保存与分享 Bunch':!group?'':conflicts.has(group.id)?'云端有新版本 · 请在分享与成员中处理':!ready?'正在连接云端…':!versions.has(group.id)?'正在保存到云端…':view?'云端已保存 · 只读成员':shadows.get(group.id)!==JSON.stringify(payloadFor(group))?'修改已保存在本机 · 等待同步':'云端已保存 · '+(roles.get(group.id)==='owner'?'创建者':'可编辑')+(realtime.get(group.id)==='SUBSCRIBED'?' · 实时连接中':''));
  }
  function hydrate(row){
   const p=row.payload;if(!validPayload(p,row.id))return false;
@@ -1348,6 +1349,26 @@ window.MINDSTORM_CONFIG = {
   }refreshPermission();}
   finally{writing=false;if(again){again=false;onPersist()}}
  }
+ function stopRealtime(){for(const entry of channels.values())try{entry.unsubscribe()}catch{}channels.clear();realtime.clear();pulling.clear()}
+ function syncRealtime(){
+  if(!ready||!user||!client?.channel)return;
+  const ids=new Set([...versions.keys()].filter(id=>groupById(id)&&roles.has(id)));
+  for(const [id,entry] of channels)if(!ids.has(id)){try{entry.unsubscribe()}catch{}channels.delete(id);realtime.delete(id)}
+  for(const id of ids){if(channels.has(id))continue;
+   const channel=client.channel('mindstorm-bunch-'+id).on('postgres_changes',{event:'UPDATE',schema:'public',table:'mindstorm_bunch_signals',filter:'bunch_id=eq.'+id},event=>{if(Number(event.new?.version)>Number(versions.get(id)||0))pullLatest(id)}).subscribe(state=>{realtime.set(id,state);if(state==='SUBSCRIBED')pullLatest(id);if(current()?.id===id)refreshPermission()});
+   channels.set(id,channel)
+  }
+ }
+ async function pullLatest(id){
+  if(!ready||!user||pulling.has(id))return;pulling.add(id);const uid=user.id;
+  try{const {data:row,error}=await client.from('mindstorm_bunches').select('id,owner_id,payload,version,updated_at').eq('id',id).single();if(error)throw error;if(uid!==user?.id||!row||Number(row.version)<=Number(versions.get(id)||0)||!validPayload(row.payload,id))return;
+   const local=groupById(id),remote=JSON.stringify(row.payload),localJson=local?JSON.stringify(payloadFor(local)):null;
+   if(local&&localJson!==remote){backup(id);conflicts.set(id,row);if(current()?.id===id)status('云端有新版本 · 请在分享与成员中处理');refreshPermission();return}
+   if(local)hydrate(row);else if(!hydrate(row))return;
+   versions.set(id,row.version);shadows.set(id,remote);const group=groupById(id);if(group){group.cloudVersion=row.version;group.cloudOwnerId=row.owner_id}
+   loading=true;appStorage.setItem('mindstorm-workspace-v1',JSON.stringify(workspace));initBunches();renderTabs();renderHistoryShelf();if(current()?.id===id&&document.body.classList.contains('bunch-view'))renderBunchBoard();loading=false;refreshPermission()
+  }catch(e){if(user?.id===uid){loading=false;if(current()?.id===id)status('实时更新暂不可用：'+errorText(e))}}finally{pulling.delete(id)}
+ }
  async function load(){
   const uid=user.id;
   const [b,m]=await Promise.all([client.from('mindstorm_bunches').select('id,owner_id,payload,version,updated_at'),client.from('mindstorm_bunch_members').select('bunch_id,user_id,role')]);
@@ -1365,7 +1386,7 @@ window.MINDSTORM_CONFIG = {
    hydrate(row);
   }
   const active=workspace.tabs.find(t=>t.id===workspace.active);if(active)state=structuredClone(active.doc);
-  initBunches();renderHistoryShelf();refreshPermission();
+  initBunches();renderHistoryShelf();refreshPermission();if(ready)syncRealtime();
  }
  async function join(token){
   const {data,error}=await client.rpc('mindstorm_join_bunch',{p_token:token});if(error)throw error;
@@ -1375,10 +1396,10 @@ window.MINDSTORM_CONFIG = {
  }
  function start(nextUser,nextClient){if(startPromise&&startingUid===nextUser?.id)return startPromise;startingUid=nextUser?.id;const pending=startUser(nextUser,nextClient);startPromise=pending;pending.finally(()=>{if(startPromise===pending)startPromise=null}).catch(()=>{});return pending}
  async function startUser(nextUser,nextClient){
-  if(!nextUser){clearTimeout(timer);client=null;user=null;ready=false;versions.clear();shadows.clear();roles.clear();conflicts.clear();refreshPermission();return}
+  if(!nextUser){clearTimeout(timer);stopRealtime();client=null;user=null;ready=false;versions.clear();shadows.clear();roles.clear();conflicts.clear();refreshPermission();return}
   if(user?.id===nextUser.id&&ready){user=nextUser;return}
-  user=nextUser;client=nextClient;ready=false;loading=true;versions.clear();shadows.clear();roles.clear();conflicts.clear();
-  try{await load();if(user?.id!==nextUser.id)return;loading=false;ready=true;refreshPermission();onPersist();const token=inviteToken();if(token){try{await join(token)}catch(e){history.replaceState(null,'',location.pathname+location.search);toast(errorText(e));loading=false;ready=true;}}}
+  stopRealtime();user=nextUser;client=nextClient;ready=false;loading=true;versions.clear();shadows.clear();roles.clear();conflicts.clear();
+  try{await load();if(user?.id!==nextUser.id)return;loading=false;ready=true;syncRealtime();refreshPermission();onPersist();const token=inviteToken();if(token){try{await join(token)}catch(e){history.replaceState(null,'',location.pathname+location.search);toast(errorText(e));loading=false;ready=true;}}}
   catch(e){if(user?.id===nextUser.id){loading=false;ready=false;status('云端加载失败：'+errorText(e));}throw e}
  }
  async function sha256(text){const bytes=new TextEncoder().encode(text),hash=await crypto.subtle.digest('SHA-256',bytes);return Array.from(new Uint8Array(hash),b=>b.toString(16).padStart(2,'0')).join('')}
