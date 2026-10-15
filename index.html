@@ -1366,7 +1366,7 @@ window.MINDSTORM_CONFIG = {
    if(local&&localJson!==remote&&localJson!==previous){backup(id);conflicts.set(id,row);if(current()?.id===id)status('云端有新版本 · 请在分享与成员中处理');refreshPermission();return}
    if(local)hydrate(row);else if(!hydrate(row))return;
    versions.set(id,row.version);shadows.set(id,remote);const group=groupById(id);if(group){group.cloudVersion=row.version;group.cloudOwnerId=row.owner_id}
-   loading=true;appStorage.setItem('mindstorm-workspace-v1',JSON.stringify(workspace));initBunches();renderTabs();renderHistoryShelf();if(current()?.id===id&&document.body.classList.contains('bunch-view'))renderBunchBoard();loading=false;refreshPermission()
+   loading=true;appStorage.setItem('mindstorm-workspace-v1',JSON.stringify(workspace));initBunches();renderTabs();renderHistoryShelf();if(current()?.id===id){if(document.body.classList.contains('bunch-view'))renderBunchBoard();else render()}loading=false;refreshPermission()
   }catch(e){if(user?.id===uid){loading=false;if(current()?.id===id)status('实时更新暂不可用：'+errorText(e))}}finally{pulling.delete(id)}
  }
  async function load(){
