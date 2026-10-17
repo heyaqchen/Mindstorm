@@ -297,6 +297,10 @@ dialog::backdrop,#allHistory::backdrop{background:#3e594b33;backdrop-filter:blur
 #canvasAddMenu{position:absolute;right:-10px;top:57px;width:186px;padding:8px;background:#fafcef;border:1px solid #b7caa6;border-radius:17px;box-shadow:0 12px 28px #3c573624}
 #canvasAddMenu button{display:flex;align-items:center;gap:13px;width:100%;color:#527348;border-radius:10px;padding:12px;text-align:left;font-size:17px}#canvasAddMenu button span{font-size:12px}#canvasAddMenu button:hover{background:#e4edcf}
 #canvasWidgets,#bunchWidgets{position:absolute;left:0;top:0;z-index:3}
+/* Threads and their inset pins sit on the cards, like pinned documents. */
+#canvasLines,#bunchLines{z-index:4}
+#canvasEdges,#bunchEdges{z-index:5}
+.connection-pin{filter:drop-shadow(1px 2px 2px #5d6c5d50);pointer-events:none}
 .canvas-widget{position:absolute;width:300px;border:1px solid #b9c9ac;border-radius:17px;background:#fffdf4;box-shadow:3px 4px 0 #d2ddc355,0 7px 18px #415d4013;overflow:hidden;color:#506e48}
 .widget-handle{display:flex;align-items:center;gap:10px;min-height:37px;padding:6px 13px;background:#eaf0dd;border-bottom:1px solid #d9e3ca;cursor:grab;touch-action:none;user-select:none;font-size:11px}.widget-handle:active{cursor:grabbing}.widget-handle>span{margin-right:auto;color:#718767}.widget-handle>span:before{content:'⠿';margin-right:8px;color:#9cac8d}.widget-handle button{font-size:11px;color:#799269;padding:3px}.widget-handle button:last-child{font-size:18px}.widget-handle button:hover{color:#3b632e}
 .canvas-widget.widget-image{padding:5px;border-radius:13px;background:#fffdf5;overflow:visible;box-shadow:0 3px 12px #415d4012}
@@ -800,8 +804,7 @@ function bunchBoardLayout(count, availableWidth){
  return {width,height:Math.max(690,...positions.map(p=>p.y+p.height+65)),positions};
 }
 function bunchBoardConnection(a,b,positions){
- const anchor=(p,t)=>{const x=p.x+p.width/2,y=p.y+p.height/2,dx=t.x+t.width/2-x,dy=t.y+t.height/2-y,k=1/Math.max(Math.abs(dx)/(p.width/2),Math.abs(dy)/(p.height/2),.001);return {x:x+dx*k,y:y+dy*k}};
- const mixed=!!(a.kind||b.kind),start=mixed?anchor(a,b):{x:a.x+a.width/2,y:a.y+17},end=mixed?anchor(b,a):{x:b.x+b.width/2,y:b.y+17};
+ const start={x:a.x+a.width/2,y:a.y+17},end={x:b.x+b.width/2,y:b.y+17};
  const mx=(start.x+end.x)/2,my=(start.y+end.y)/2,dx=end.x-start.x,dy=end.y-start.y,len=Math.hypot(dx,dy)||1;
  let control={x:mx,y:my},middle=control;
  for(const offset of [0,85,-85,160,-160,240,-240]){
@@ -835,11 +838,15 @@ function graphCard(tab,index,p,canvas=false){
  return card;
 }
 function drawGraphConnections(group,positions,lines,edges,interactive){
- lines.replaceChildren();edges.replaceChildren();const lookup=new Map(positions.map(p=>[p.id,p]));
- for(const edge of group.edges){const a=lookup.get(edge.from),b=lookup.get(edge.to);if(!a||!b)continue;const c=bunchBoardConnection(a,b,positions),line=document.createElementNS('http://www.w3.org/2000/svg','path');line.setAttribute('d',c.path);lines.append(line);
+ lines.replaceChildren();edges.replaceChildren();const lookup=new Map(positions.map(p=>[p.id,p])),pinned=new Set();
+ for(const edge of group.edges){const a=lookup.get(edge.from),b=lookup.get(edge.to);if(!a||!b)continue;pinned.add(a.id);pinned.add(b.id);const c=bunchBoardConnection(a,b,positions),line=document.createElementNS('http://www.w3.org/2000/svg','path');line.setAttribute('d',c.path);lines.append(line);
   const button=document.createElement('button');button.className='edge-thought';button.textContent='···';button.dataset.edgeId=edge.id;button.dataset.anchorX=c.middle.x;button.dataset.anchorY=c.middle.y;button.style.left=(c.middle.x-16)+'px';button.style.top=(c.middle.y-16)+'px';button.setAttribute('aria-label','查看 '+(edge.author?.name||'成员')+' 的关联想法');button.setAttribute('aria-expanded',String(interactive&&collab.edge===edge.id&&!$('#thoughtDialog').hidden));
   if(interactive)button.onclick=()=>showThought(edge.id);else{button.tabIndex=-1;button.setAttribute('aria-hidden','true')};edges.append(button);
  }
+ // Draw pins above every thread, including image and profile-card surfaces.
+ const ns='http://www.w3.org/2000/svg',defs=document.createElementNS(ns,'defs'),gradient=document.createElementNS(ns,'radialGradient'),gradientId=lines.id+'-pin';gradient.id=gradientId;gradient.setAttribute('cx','35%');gradient.setAttribute('cy','30%');
+ for(const [offset,color] of [['0%','#fff3c7'],['67%','#bfac70'],['100%','#a69560']]){const stop=document.createElementNS(ns,'stop');stop.setAttribute('offset',offset);stop.setAttribute('stop-color',color);gradient.append(stop)}defs.append(gradient);lines.append(defs);
+ for(const id of pinned){const p=lookup.get(id),pin=document.createElementNS(ns,'circle');pin.setAttribute('cx',p.x+p.width/2);pin.setAttribute('cy',p.y+17);pin.setAttribute('r','5');pin.setAttribute('fill','url(#'+gradientId+')');pin.setAttribute('class','connection-pin');lines.append(pin)}
  if(interactive)positionCanvasThought();
 }
 function renderBunchBoard(){
